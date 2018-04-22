@@ -19,17 +19,16 @@
 
   Color should be set differently for each polygon.
   ====================*/
-void scanline_convert( struct matrix *points, int i, screen s, zbuffer zb, color c) {
+void scanline_convert( struct matrix * polygons, int i, screen s, zbuffer zb, color c) {
   double point0[3];
   double point1[3];
   double point2[3];
   double * top;
   double * middle;
   double * bottom;
-  point0[0] = points->m[i][0];point0[1] = points->m[i][1];point0[2] = points->m[i][2];
-  point1[0] = points->m[i][0];point1[1] = points->m[i][1];point1[2] = points->m[i][2];
-  point2[0] = points->m[i][0];point2[1] = points->m[i][1];point2[2] = points->m[i][2];
-  
+  point0[0] = polygons->m[0][i];point0[1] = polygons->m[1][i];point0[2] = polygons->m[2][i];
+  point1[0] = polygons->m[0][i+1];point1[1] = polygons->m[1][i+1];point1[2] = polygons->m[2][i+1];
+  point2[0] = polygons->m[0][i+2];point2[1] = polygons->m[1][i+2];point2[2] = polygons->m[2][i+2];
   if(point0[1] > point1[1] && point0[1] > point2[1]){
     top = point0;
     if(point1[1] < point2[1]){
@@ -64,32 +63,36 @@ void scanline_convert( struct matrix *points, int i, screen s, zbuffer zb, color
     }
   }
 
-  double xdelta_BT, xdelta_BM, xdelta_MT, zdelta_BT, zdelta_BM, zdelta_MT, x0, x1, y, z0, z1;
+  double xdelta_BT, xdelta_BMT, zdelta_BT, zdelta_BMT, x0, x1, y, z0, z1;
   xdelta_BT=(top[0]-bottom[0])/(top[1]-bottom[1]);
-  xdelta_BM=(middle[0]-bottom[0])/(middle[1]-bottom[1]);
-  xdelta_MT=(top[0]-middle[0])/(top[1]-middle[1]);
   zdelta_BT=(top[2]-bottom[2])/(top[1]-bottom[1]);
-  zdelta_BM=(middle[2]-bottom[2])/(middle[1]-bottom[1]);
-  zdelta_MT=(top[2]-middle[2])/(top[1]-middle[1]);
-
+  if(middle[1]-bottom[1] == 0){
+    xdelta_BMT = (top[0]-middle[0])/(top[1]-middle[1]);
+    zdelta_BMT = (top[2]-middle[2])/(top[1]-middle[1]);
+  } else{
+    xdelta_BMT = (middle[0]-bottom[0])/(middle[1]-bottom[1]);
+    zdelta_BMT = (middle[2]-bottom[2])/(middle[1]-bottom[1]);
+  }
+  //printf("%lf, %lf, %lf\n", top[1]-bottom[1], middle[1]-bottom[1], top[1]-middle[1]);
   y = bottom[1];
   x0 = bottom[0];
   x1 = bottom[0];
   z0 = bottom[2];
   z1 = bottom[2];
+
+  printf("%lf\n", middle[1]);
   
   while(y < top[1]){
-    draw_line(x0, y, z0, x1, y, z1, s, zb, c);
     x0 += xdelta_BT;
     z0 += zdelta_BT;
-    if(y > middle[1]){
-      x1 += xdelta_MT;
-      z1 += zdelta_MT;
-    } else{
-      x1 += xdelta_BM;
-      z1 += zdelta_BM;
-    }
+    x1 += xdelta_BMT;
+    z1 += zdelta_BMT;
     y++;
+    if(y == (int)middle[1] && top[1]-middle[1] != 0){
+      xdelta_BMT = (top[0]-middle[0])/(top[1]-middle[1]);
+      zdelta_BMT = (top[2]-middle[2])/(top[1]-middle[1]);
+    }
+    draw_line(x0, y, z0, x1, y, z1, s, zb, c);
   }
 }
 
@@ -113,7 +116,6 @@ void add_polygon( struct matrix *polygons,
                   double x0, double y0, double z0,
                   double x1, double y1, double z1,
                   double x2, double y2, double z2 ) {
-
   add_point(polygons, x0, y0, z0);
   add_point(polygons, x1, y1, z1);
   add_point(polygons, x2, y2, z2);
@@ -129,7 +131,6 @@ void add_polygon( struct matrix *polygons,
   triangles
   ====================*/
 void draw_polygons(struct matrix *polygons, screen s, zbuffer zb, color c ) {
-
   if ( polygons->lastcol < 3 ) {
     printf("Need at least 3 points to draw a polygon!\n");
     return;
@@ -140,11 +141,8 @@ void draw_polygons(struct matrix *polygons, screen s, zbuffer zb, color c ) {
 
   srand(time(0));
   for (point=0; point < polygons->lastcol-2; point+=3) {
-
     normal = calculate_normal(polygons, point);
-
     if ( normal[2] > 0 ) {
-
       draw_line( polygons->m[0][point],
                  polygons->m[1][point],
                  polygons->m[2][point],
@@ -195,7 +193,6 @@ void add_box( struct matrix * polygons,
   x1 = x+width;
   y1 = y-height;
   z1 = z-depth;
-
   //front
   add_polygon(polygons, x, y, z, x1, y1, z, x1, y, z);
   add_polygon(polygons, x, y, z, x, y1, z, x1, y1, z);
@@ -577,7 +574,7 @@ void draw_line(int x0, int y0, double z0,
   int x, y, d, A, B;
   int dy_east, dy_northeast, dx_east, dx_northeast, d_east, d_northeast;
   int loop_start, loop_end;
-  double dz = (z1 - z0)/(y1-y0);
+  double dz = (z1 - z0)/(x1-x0);
 
   //swap points if going right -> left
   int xt, yt;
@@ -637,10 +634,9 @@ void draw_line(int x0, int y0, double z0,
       loop_end = y;
     }
   }
-
+  //printf("%lf %lf\n", z0, dz);
   while ( loop_start < loop_end ) {
-
-    plot( s, zb, c, x, y, z0);
+    plot(s, zb, c, x, y, z0);
     if ( (wide && ((A > 0 && d > 0) ||
                    (A < 0 && d < 0)))
          ||
@@ -658,5 +654,6 @@ void draw_line(int x0, int y0, double z0,
     loop_start++;
     z0 += dz;
   } //end drawing loop
-  plot( s, zb, c, x1, y1, 0 );
+  //printf("%lf, %lf\n", z0, z1);
+  plot( s, zb, c, x1, y1, z1);
 } //end draw_line
