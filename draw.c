@@ -29,7 +29,7 @@ void scanline_convert( struct matrix * polygons, int i, screen s, zbuffer zb, co
   point0[0] = polygons->m[0][i];point0[1] = polygons->m[1][i];point0[2] = polygons->m[2][i];
   point1[0] = polygons->m[0][i+1];point1[1] = polygons->m[1][i+1];point1[2] = polygons->m[2][i+1];
   point2[0] = polygons->m[0][i+2];point2[1] = polygons->m[1][i+2];point2[2] = polygons->m[2][i+2];
-  if(point0[1] > point1[1] && point0[1] > point2[1]){
+  if(point0[1] > point1[1] && point0[1] > point2[1]){   
     top = point0;
     if(point1[1] < point2[1]){
       bottom = point1;
@@ -62,25 +62,27 @@ void scanline_convert( struct matrix * polygons, int i, screen s, zbuffer zb, co
       middle = point0;
     }
   }
+  printf("X: %lf %lf %lf\n", top[0], middle[0], bottom[0]);
+  printf("Y: %lf %lf %lf\n", top[1], middle[1], bottom[1]);
 
   double xdelta_BT, xdelta_BMT, zdelta_BT, zdelta_BMT, x0, x1, y, z0, z1;
   xdelta_BT=(top[0]-bottom[0])/(top[1]-bottom[1]);
   zdelta_BT=(top[2]-bottom[2])/(top[1]-bottom[1]);
   if(middle[1]-bottom[1] == 0){
+    x1 = middle[0];
+    z1 = middle[2];
     xdelta_BMT = (top[0]-middle[0])/(top[1]-middle[1]);
     zdelta_BMT = (top[2]-middle[2])/(top[1]-middle[1]);
   } else{
+    x1 = bottom[0];
+    z1 = bottom[2];
     xdelta_BMT = (middle[0]-bottom[0])/(middle[1]-bottom[1]);
     zdelta_BMT = (middle[2]-bottom[2])/(middle[1]-bottom[1]);
   }
   //printf("%lf, %lf, %lf\n", top[1]-bottom[1], middle[1]-bottom[1], top[1]-middle[1]);
   y = bottom[1];
   x0 = bottom[0];
-  x1 = bottom[0];
   z0 = bottom[2];
-  z1 = bottom[2];
-
-  printf("%lf\n", middle[1]);
   
   while(y < top[1]){
     x0 += xdelta_BT;
@@ -88,7 +90,7 @@ void scanline_convert( struct matrix * polygons, int i, screen s, zbuffer zb, co
     x1 += xdelta_BMT;
     z1 += zdelta_BMT;
     y++;
-    if(y == (int)middle[1] && top[1]-middle[1] != 0){
+    if(y > middle[1] && top[1]-middle[1] != 0){
       xdelta_BMT = (top[0]-middle[0])/(top[1]-middle[1]);
       zdelta_BMT = (top[2]-middle[2])/(top[1]-middle[1]);
     }
@@ -138,35 +140,13 @@ void draw_polygons(struct matrix *polygons, screen s, zbuffer zb, color c ) {
   color c_fill;
   int point;
   double *normal;
-
-  srand(time(0));
+  
   for (point=0; point < polygons->lastcol-2; point+=3) {
     normal = calculate_normal(polygons, point);
     if ( normal[2] > 0 ) {
-      draw_line( polygons->m[0][point],
-                 polygons->m[1][point],
-                 polygons->m[2][point],
-                 polygons->m[0][point+1],
-                 polygons->m[1][point+1],
-                 polygons->m[2][point+1],
-                 s, zb, c);
-      draw_line( polygons->m[0][point+2],
-                 polygons->m[1][point+2],
-                 polygons->m[2][point+2],
-                 polygons->m[0][point+1],
-                 polygons->m[1][point+1],
-                 polygons->m[2][point+1],
-                 s, zb, c);
-      draw_line( polygons->m[0][point],
-                 polygons->m[1][point],
-                 polygons->m[2][point],
-                 polygons->m[0][point+2],
-                 polygons->m[1][point+2],
-                 polygons->m[2][point+2],
-                 s, zb, c);
-      c_fill.red = rand() % 256;
-      c_fill.green = rand() % 256;
-      c_fill.blue = rand() % 256;
+      c_fill.red = rand() % 255;
+      c_fill.green = rand() % 255;
+      c_fill.blue = rand() % 255;
       scanline_convert(polygons, point, s, zb, c_fill);
     }
   }
@@ -547,7 +527,6 @@ void add_edge( struct matrix * points,
   to the screen
   ====================*/
 void draw_lines( struct matrix * points, screen s, zbuffer zb, color c) {
-
   if ( points->lastcol < 2 ) {
     printf("Need at least 2 points to draw a line!\n");
     return;
@@ -645,14 +624,15 @@ void draw_line(int x0, int y0, double z0,
       y+= dy_northeast;
       d+= d_northeast;
       x+= dx_northeast;
+      z0 += dz*dy_northeast;
     }
     else {
       x+= dx_east;
       y+= dy_east;
       d+= d_east;
+      z0 += dz*dy_east;
     }
     loop_start++;
-    z0 += dz;
   } //end drawing loop
   //printf("%lf, %lf\n", z0, z1);
   plot( s, zb, c, x1, y1, z1);
