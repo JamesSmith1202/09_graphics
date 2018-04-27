@@ -8,6 +8,10 @@
 #include "math.h"
 #include "gmath.h"
 
+int arr_diff (const void * p0, const void * p1) {
+  return ((double *)p0)[1] - ((double *)p1)[1];
+}
+
 /*======== void scanline_convert() ==========
   Inputs: struct matrix *points
           int i
@@ -20,81 +24,44 @@
   Color should be set differently for each polygon.
   ====================*/
 void scanline_convert( struct matrix * polygons, int i, screen s, zbuffer zb, color c) {
-  double point0[3];
-  double point1[3];
-  double point2[3];
-  double * top;
-  double * middle;
-  double * bottom;
-  point0[0] = polygons->m[0][i];point0[1] = polygons->m[1][i];point0[2] = polygons->m[2][i];
-  point1[0] = polygons->m[0][i+1];point1[1] = polygons->m[1][i+1];point1[2] = polygons->m[2][i+1];
-  point2[0] = polygons->m[0][i+2];point2[1] = polygons->m[1][i+2];point2[2] = polygons->m[2][i+2];
-  if(point0[1] > point1[1] && point0[1] > point2[1]){   
-    top = point0;
-    if(point1[1] < point2[1]){
-      bottom = point1;
-      middle = point2;
-    }
-    else{
-      bottom = point2;
-      middle = point1;
-    }
-  }
-  else if (point1[1] > point2[1]){
-    top = point1;
-    if(point0[1] < point2[1]){
-      bottom = point0;
-      middle = point2;
-    }
-    else{
-      bottom = point2;
-      middle = point0;
-    }
-  }
-  else{
-    top = point2;
-    if(point0[1] < point1[1]){
-      bottom = point0;
-      middle = point1;
-    }
-    else{
-      bottom = point1;
-      middle = point0;
-    }
-  }
-  printf("X: %lf %lf %lf\n", top[0], middle[0], bottom[0]);
-  printf("Y: %lf %lf %lf\n", top[1], middle[1], bottom[1]);
-
-  double xdelta_BT, xdelta_BMT, zdelta_BT, zdelta_BMT, x0, x1, y, z0, z1;
-  xdelta_BT=(top[0]-bottom[0])/(top[1]-bottom[1]);
-  zdelta_BT=(top[2]-bottom[2])/(top[1]-bottom[1]);
-  if(middle[1]-bottom[1] == 0){
-    x1 = middle[0];
-    z1 = middle[2];
-    xdelta_BMT = (top[0]-middle[0])/(top[1]-middle[1]);
-    zdelta_BMT = (top[2]-middle[2])/(top[1]-middle[1]);
-  } else{
-    x1 = bottom[0];
-    z1 = bottom[2];
-    xdelta_BMT = (middle[0]-bottom[0])/(middle[1]-bottom[1]);
-    zdelta_BMT = (middle[2]-bottom[2])/(middle[1]-bottom[1]);
-  }
-  //printf("%lf, %lf, %lf\n", top[1]-bottom[1], middle[1]-bottom[1], top[1]-middle[1]);
-  y = bottom[1];
+  int y, y_deltaBM, y_deltaBT, y_deltaMT, swapped;
+  double x0, x1, dx0, dx1, z0, z1, dz0, dz1;
+  double points[3][3] = {
+    {polygons->m[0][i], polygons->m[1][i], polygons->m[2][i]},
+    {polygons->m[0][i+1], polygons->m[1][i+1], polygons->m[2][i+1]},
+    {polygons->m[0][i+2], polygons->m[1][i+2], polygons->m[2][i+2]}
+  };
+  qsort(points, 3, sizeof(points[0]), arr_diff);
+  double * top = points[2];
+  double * middle = points[1];
+  double * bottom = points[0];
   x0 = bottom[0];
+  x1 = bottom[0];
   z0 = bottom[2];
-  
-  while(y < top[1]){
-    x0 += xdelta_BT;
-    z0 += zdelta_BT;
-    x1 += xdelta_BMT;
-    z1 += zdelta_BMT;
-    y++;
-    if(y > middle[1] && top[1]-middle[1] != 0){
-      xdelta_BMT = (top[0]-middle[0])/(top[1]-middle[1]);
-      zdelta_BMT = (top[2]-middle[2])/(top[1]-middle[1]);
-    }
+  z1 = bottom[2];
+  y = (int)bottom[1];
+  y_deltaBT = (int)top[1] - (int)bottom[1];
+  y_deltaBM = (int)middle[1] - (int)bottom[1];
+  y_deltaMT = (int)(top[1]) - (int)(middle[1]);
+  dx0 = y_deltaBT > 0 ? (top[0]-bottom[0])/y_deltaBT : 0;
+  dx1 = y_deltaBM > 0 ? (middle[0]-bottom[0])/y_deltaBM : 0;
+  dz0 = y_deltaBT > 0 ? (top[2]-bottom[2])/y_deltaBT : 0;
+  dz1 = y_deltaBM > 0 ? (middle[2]-bottom[2])/y_deltaBM : 0;
+  swapped = 0;
+  while ( y < (int)top[1] ) {
     draw_line(x0, y, z0, x1, y, z1, s, zb, c);
+    x0 += dx0;
+    x1 += dx1;
+    z0 += dz0;
+    z1 += dz1;
+    y++;
+    if ( !swapped && y >= (int)(middle[1]) ) {
+      swapped = 1;
+      dx1 = y_deltaMT > 0 ? (top[0]-middle[0])/y_deltaMT : 0;
+      dz1 = y_deltaMT > 0 ? (top[2]-middle[2])/y_deltaMT : 0;
+      x1 = middle[0];
+      z1 = middle[2];
+    }
   }
 }
 
@@ -553,7 +520,6 @@ void draw_line(int x0, int y0, double z0,
   int x, y, d, A, B;
   int dy_east, dy_northeast, dx_east, dx_northeast, d_east, d_northeast;
   int loop_start, loop_end;
-  double dz = (z1 - z0)/(x1-x0);
 
   //swap points if going right -> left
   int xt, yt;
@@ -613,6 +579,9 @@ void draw_line(int x0, int y0, double z0,
       loop_end = y;
     }
   }
+
+  double dz = (z1 - z0) / (loop_end - loop_start);
+
   //printf("%lf %lf\n", z0, dz);
   while ( loop_start < loop_end ) {
     plot(s, zb, c, x, y, z0);
@@ -624,14 +593,13 @@ void draw_line(int x0, int y0, double z0,
       y+= dy_northeast;
       d+= d_northeast;
       x+= dx_northeast;
-      z0 += dz*dy_northeast;
     }
     else {
       x+= dx_east;
       y+= dy_east;
       d+= d_east;
-      z0 += dz*dy_east;
     }
+    z0+=dz;
     loop_start++;
   } //end drawing loop
   //printf("%lf, %lf\n", z0, z1);
